@@ -41,8 +41,38 @@ var dialog4 = {
     if (retn) {
       dialog.end("ok");
       console.println("Selected: " + retn.label + " with value: " + retn.value);
+      // var sel = ids[retn.value];
       global.dropdownId = ids[retn.value];
       app.alert(ids[retn.value]);
+
+      // try {
+      //   var params = {
+      //     cVerb: "GET",
+      //     cURL: "https://api.smartcite.povio.dev/api/cases/"+sel+"/documents",
+      //     aHeaders: [{ name: "x-api-key", value: "aaab07c0-cce0-4014-8045-76a2db8f745a" }]
+      //   };
+      //   var responseStream = Net.HTTP.request(params);
+      //   var response = SOAP.stringFromStream(responseStream);
+    
+      //   // Parse the JSON and extract titles from the `items` array
+      //   var data = JSON.parse(response);
+      //   if (Array.isArray(data.items)) {
+      //     global.uploadedTitles = data.items.map(item => item.title); // Extract titles from items array
+      //     global.uploadedMediaUrl = data.items.map(item => item.mediaUrl);
+      //   } else {
+      //     app.alert("Data format unexpected: 'items' is not an array.");
+      //     global.uploadedTitles = ["No data available"];
+      //   }
+      //   console.println(response);
+      //   console.println("\n\nTitles stored in global: " + global.uploadedTitles);
+      // }
+      // catch (e) {
+      //   app.alert({ cMsg: e.message, cTitle: "Exception" });
+      // }
+
+
+
+      
       try {
         this.gotoNamedDest("dest" + retn.value);
       } catch (err) {
