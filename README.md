@@ -17,5 +17,6 @@ Press ctrl + J to open the script console.
 
 
 Then, You can also find the new plugin in "Edit" menu.
-![image](https://github.com/user-attachments/assets/65b1c3f3-741d-43f4-8cbe-3c853483844a)
+![image](https://github.com/user-attachments/assets/e70ae520-70dd-4e89-b7bb-2614fa85dbb6)
+
 
