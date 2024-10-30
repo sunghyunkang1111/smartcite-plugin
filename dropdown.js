@@ -14,6 +14,7 @@ var runExtract1 = app.trustedFunction(function (sel) {
     if (Array.isArray(PDFdata.items)) {
       global.PDFuploadedTitles = PDFdata.items.map(item => item.title); // Extract titles from items array
       global.PDFuploadedMediaUrl = PDFdata.items.map(item => item.mediaUrl);
+      global.PDFuploadedIDms = PDFdata.items.map(item => item.id);
     } else {
       app.alert("Data format unexpected: 'items' is not an array.");
       global.PDFuploadedTitles = ["No data available"];
@@ -45,6 +46,35 @@ var downloadAndOpenPDF = app.trustedFunction(function (URL) {
 });
 
 
+
+
+var select_highlight = app.trustedFunction(function (ID) {
+  app.beginPriv();
+  try {
+    var PDFparams = {
+      cVerb: "GET",
+      cURL: "https://api.smartcite.povio.dev/api/documents/" + ID + "/citations",
+      aHeaders: [{ name: "x-api-key", value: "aaab07c0-cce0-4014-8045-76a2db8f745a" }]
+    };
+    var PDFresponseStream = Net.HTTP.request(PDFparams);
+    var PDFresponse = SOAP.stringFromStream(PDFresponseStream);
+
+    // Parse the JSON and extract titles from the `items` array
+    var PDFdata = JSON.parse(PDFresponse);
+    if (Array.isArray(PDFdata.items)) {
+      global.PDFhighlightText = PDFdata.items.map(item => item.sourceText); // Extract titles from items array
+    } else {
+      app.alert("Data format unexpected: 'items' is not an array.");
+    }
+    app.alert(PDFresponse);
+  }
+  catch (e) {
+    app.alert({ cMsg: e.message, cTitle: "Exception" });
+  }
+  app.endPriv();
+});
+
+
 // Trusted function to create a document and write to a file
 var trustedWriteToFile = app.trustedFunction(function (filePath, data) {
   app.beginPriv();
@@ -69,6 +99,7 @@ var trustedWriteToFile = app.trustedFunction(function (filePath, data) {
 
 
 var selUri = {};
+var id_ms = {};
 var dialog4 = {
   initialize: function (dialog) {
     var titles = global.uploadedTitles || ["No data available"]; // Default if no data is loaded
@@ -83,9 +114,11 @@ var dialog4 = {
       runExtract1(sel);
       var PDFTitles = global.PDFuploadedTitles;
       var PDFMediaUrl = global.PDFuploadedMediaUrl;
+      var PDFIDms = global.PDFuploadedIDms;
       PDFTitles.forEach((pdftitle, index) => {
         sectionOptions[pdftitle] = -(cnt + 1);
         selUri[cnt + 1] = PDFMediaUrl[index];
+        id_ms[cnt + 1] = PDFIDms[index];
         cnt = cnt + 1;
       })
       titleOptions[title] = sectionOptions;
@@ -127,7 +160,10 @@ var dialog4 = {
     if (retn) {
       dialog.end("ok");
       console.println("Selected: " + retn.label + " with value: " + retn.value + "URl : " + selUri[retn.value]);
+      // app.alert(selUri[retn.value]);
+      // app.alert(id_ms[retn.value]);
       downloadAndOpenPDF(selUri[retn.value]);
+      select_highlight(id_ms[retn.value]);
     } else {
       app.alert("Please make a selection, or cancel.");
     }
