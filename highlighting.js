@@ -1,6 +1,36 @@
      
     var highlightColor = color.yellow; // Change to your desired highlight color
+    var docu_url = global.PDFdocu_URL;
 
+    var trustedWriteToFile = app.trustedFunction(function (filePath, data) {
+        app.beginPriv();
+        var doc = app.newDoc(); // This creates a new document with one page
+        var textField = doc.addField("TextField1", "text", 0, [50, 50, 300, 100]); // Adjust coordinates as needed
+        textField.value = data; // Set the value of the text field to the encoded URL
+        app.alert("Saving document to: " + filePath);
+        try {
+            doc.saveAs(filePath); // Save without additional options
+        } catch (e) {
+            app.alert("Error saving document: " + e.message);
+        }
+        doc.closeDoc(true);
+        app.alert("Saved correctly");
+        app.endPriv();
+      });
+
+    var downloadAndOpenPDF = app.trustedFunction(function (URL) {
+        app.beginPriv();
+        var pdfURL = URL; // full URL here
+        var batFile = "C:/Program Files/Adobe/Acrobat DC/Acrobat/Javascripts/launch_pdf.bat";
+        var paramFilePath = "C:/Program Files/Adobe/Acrobat DC/Acrobat/Javascripts/parameter.pdf";
+        trustedWriteToFile(paramFilePath, URL);
+        app.launchURL("file:///" + batFile);
+        app.endPriv();
+      });
+
+    function open_document(num){
+        downloadAndOpenPDF(docu_url[num]);
+    }
     // Function to highlight specific texts
     function highlightSpecificTexts() {
         var keywords = global.PDFhighlightText;
@@ -44,14 +74,19 @@
 
                                 var highlightRect = [left, bottom, right, top];
 
-                                this.addAnnot({
+                                var annot = this.addAnnot({
+                                    cName: i+"0000000000"+k,
                                     page: i,
                                     type: "Square",
                                     rect: highlightRect,
                                     fillColor: highlightColor,
                                     strokeColor: highlightColor,
                                     opacity: 0.2,
+                                    contents: k,
                                 });
+                                // annot.setAction("MouseUp", "app.open_link(annots[j].contents);");
+                                    annot.action = "open_document('' + '" + k + "');";
+                                // if(annot) annot.setAction("MouseUp", "app.open_link(annots[j].contents);");
                             }
                             
                         }
