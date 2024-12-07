@@ -58,16 +58,16 @@ ACCB1 ASBool ACCB2 MyPluginSetmenu()
 	return PluginMenuItem("Basic Plugin", "ADBE:BasicPluginMenu"); 
 }
 	
-void createFile()
-{
-    // File path for writing "Hello"
-    const char* filePath = "C:/Users/ddd/Desktop/test.txt";
-    FILE* file = fopen(filePath, "w");
-    if (file) {
-        fprintf(file, "Hello");
-        fclose(file);
-    }
-}
+//void createFile()
+//{
+//    // File path for writing "Hello"
+//    const char* filePath = "C:/Users/ddd/Desktop/test.txt";
+//    FILE* file = fopen(filePath, "w");
+//    if (file) {
+//        fprintf(file, "Hello");
+//        fclose(file);
+//    }
+//}
 
 void ExtractArtifacts(const std::string& strContents, std::vector<std::string>& vArtifact)
 {
@@ -146,50 +146,50 @@ ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clie
     return true; // Continue enumeration
 }
 
-void ExtractWordsFromPDF() {
-    // Encoding info and vector: Pass NULL for defaults
-    ASUns16* outEncInfo = NULL;
-    char** outEncVec = NULL;
-
-    // Ligature table: Use default ligatures by passing NULL
-    char** ligatureTbl = NULL;
-
-    // Algorithm version: Use the latest
-    ASInt16 algVersion = WF_LATEST_VERSION;
-
-    // Word-finding options: Ignored in Acrobat 5.0+, pass 0
-    ASUns16 rdFlags = 0;
-
-    // Client data: Pass NULL if no custom data is needed
-    void* clientData = NULL;
-
-    AVDoc avDoc = AVAppGetActiveDoc();
-    if (!avDoc) {
-        AVAlertNote("No active document found!");
-        return;
-    }
-
-    PDDoc pdDoc = AVDocGetPDDoc(avDoc);
-    if (!pdDoc) {
-        AVAlertNote("No valid PDF document found!");
-        return;
-    }
-
-    // Create Word Finder
-    ASBool success = false;
-    PDWordFinder wordFinder = PDDocCreateWordFinder(pdDoc, outEncInfo, outEncVec, ligatureTbl, algVersion, rdFlags, clientData);
-    if (wordFinder) {
-        // Use the Word Finder to enumerate or acquire words
-        // Example: Enumerate words on the first page
-        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, NULL);
-
-        // Destroy the Word Finder
-        PDWordFinderDestroy(wordFinder);
-    }
-    else {
-        std::cerr << "Failed to create Word Finder." << std::endl;
-    }
-}
+//void ExtractWordsFromPDF() {
+//    // Encoding info and vector: Pass NULL for defaults
+//    ASUns16* outEncInfo = NULL;
+//    char** outEncVec = NULL;
+//
+//    // Ligature table: Use default ligatures by passing NULL
+//    char** ligatureTbl = NULL;
+//
+//    // Algorithm version: Use the latest
+//    ASInt16 algVersion = WF_LATEST_VERSION;
+//
+//    // Word-finding options: Ignored in Acrobat 5.0+, pass 0
+//    ASUns16 rdFlags = 0;
+//
+//    // Client data: Pass NULL if no custom data is needed
+//    void* clientData = NULL;
+//
+//    AVDoc avDoc = AVAppGetActiveDoc();
+//    if (!avDoc) {
+//        AVAlertNote("No active document found!");
+//        return;
+//    }
+//
+//    PDDoc pdDoc = AVDocGetPDDoc(avDoc);
+//    if (!pdDoc) {
+//        AVAlertNote("No valid PDF document found!");
+//        return;
+//    }
+//
+//    // Create Word Finder
+//    ASBool success = false;
+//    PDWordFinder wordFinder = PDDocCreateWordFinder(pdDoc, outEncInfo, outEncVec, ligatureTbl, algVersion, rdFlags, clientData);
+//    if (wordFinder) {
+//        // Use the Word Finder to enumerate or acquire words
+//        // Example: Enumerate words on the first page
+//        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, NULL);
+//
+//        // Destroy the Word Finder
+//        PDWordFinderDestroy(wordFinder);
+//    }
+//    else {
+//        std::cerr << "Failed to create Word Finder." << std::endl;
+//    }
+//}
 
 /**		BasicPlugin project is an Acrobat plugin sample with the minimum code 
 	to provide an environment for plugin developers to get started quickly.
@@ -207,7 +207,7 @@ void ExtractWordsFromPDF() {
 	@see PDDocGetNumPages
 */ 
 ACCB1 void ACCB2 MyPluginCommand(void* clientData) {
-    ExtractWordsFromPDF();
+    //ExtractWordsFromPDF();
     size_t strSize = INITIAL_STR_SIZE;
     char* str = (char*)malloc(strSize);
     if (!str) {
