@@ -134,7 +134,7 @@ if "%SDKPIDir%"a == ""a echo not performed. SDKPIDir environment variable not se
     </ResourceCompile>
     <Link>
       <AdditionalOptions>/EXPORT:PlugInMain %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalDependencies>libcurl-d.lib;odbc32.lib;odbccp32.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;Normaliz.lib;C:\Users\ddd\miniconda3\Library\lib\libssl.lib;C:\Users\ddd\miniconda3\Library\lib\libcrypto.lib;C:\Users\ddd\miniconda3\Library\lib\z.lib;C:\Users\ddd\miniconda3\Library\lib\libssh2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libcurl-d.lib;odbc32.lib;odbccp32.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;Normaliz.lib;libssl.lib;libcrypto.lib;z.lib;libssh2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)/smartcite.api</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <GenerateDebugInformation>true</GenerateDebugInformation>

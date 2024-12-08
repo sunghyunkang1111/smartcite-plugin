@@ -2,3 +2,7 @@
 **/*.pdb
 **/Debug_x64/*
 !**/Debug_x64/libcurl-d.lib
+!**/Debug_x64/libssl.lib
+!**/Debug_x64/libcrypto.lib
+!**/Debug_x64/z.lib
+!**/Debug_x64/libssh2.lib
