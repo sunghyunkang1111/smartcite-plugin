@@ -69,23 +69,6 @@ ACCB1 ASBool ACCB2 MyPluginSetmenu()
 //    }
 //}
 
-void ExtractArtifacts(const std::string& strContents, std::vector<std::string>& vArtifact)
-{
-	std::string::size_type nPos = 0, nPrevPos = 0;
-
-	// Parse through the "Contents" stream
-	while ((nPos = strContents.find('\n', nPos)) != std::string::npos) {
-		std::string strTmp = strContents.substr(nPrevPos, nPos - nPrevPos);
-
-		if (strTmp.length() > 9 && !strTmp.substr(0, 9).compare("/Artifact")) {
-			vArtifact.push_back(strTmp);
-		}
-
-		// Move on to the next line
-		nPrevPos = ++nPos;
-	}
-}
-
 ASFixedRect annotBounds;
 
 ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clientData) {
@@ -100,7 +83,7 @@ ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clie
         ASFixedQuad wordQuad;
         PDWordGetNthQuad(wInfo, 0, &wordQuad);
 
-        // Prepare annotation bounds
+        // Convert the quad to a rectangle
         ASFixedRect annotBounds;
         annotBounds.left = wordQuad.bl.h;
         annotBounds.bottom = wordQuad.bl.v;
@@ -112,24 +95,38 @@ ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clie
         if (avDoc) {
             PDDoc pdDoc = AVDocGetPDDoc(avDoc);
             PDPage pdPage = PDDocAcquirePage(pdDoc, pgNum);
-            PDPageGetCropBox(pdPage, &annotBounds);
 
             if (pdPage) {
                 // Add highlight annotation
                 PDAnnot pdAnnot = PDPageAddNewAnnot(pdPage, -1, ASAtomFromString("Highlight"), &annotBounds);
 
-                // Set annotation color (e.g., yellow)
-                PDColorValueRec color;
-                color.space = PDDeviceRGB;
-                color.value[0] = ASFloatToFixed(1.0f); // Red
-                color.value[1] = ASFloatToFixed(1.0f); // Green
-                color.value[2] = ASFloatToFixed(0.0f); // Blue
-                PDAnnotSetColor(pdAnnot, &color);
+                {
+                    // Access the annotation's Cos object
+                    CosObj annotObj = PDAnnotGetCosObj(pdAnnot);
 
-                // Set annotation flags
-                PDAnnotSetFlags(pdAnnot, pdAnnotPrint);
+                    // Create the QuadPoints array
+                    CosDoc cosDoc = PDDocGetCosDoc(pdDoc);
+                    CosObj quadArray = CosNewArray(cosDoc, false, 8);
+                    CosArrayPut(quadArray, 0, CosNewFixed(cosDoc, false, wordQuad.tl.h)); // top-left       Bottom-right X
+                    CosArrayPut(quadArray, 1, CosNewFixed(cosDoc, false, wordQuad.tl.v)); // top-left       Bottom-right Y
+                    CosArrayPut(quadArray, 2, CosNewFixed(cosDoc, false, wordQuad.tr.h)); // Top-right X
+                    CosArrayPut(quadArray, 3, CosNewFixed(cosDoc, false, wordQuad.tr.v)); // Top-right Y
+                    CosArrayPut(quadArray, 4, CosNewFixed(cosDoc, false, wordQuad.bl.h)); // Bottom-left X
+                    CosArrayPut(quadArray, 5, CosNewFixed(cosDoc, false, wordQuad.bl.v)); // Bottom-left Y
+                    CosArrayPut(quadArray, 6, CosNewFixed(cosDoc, false, wordQuad.br.h)); // Bottom-right        Top-left X
+                    CosArrayPut(quadArray, 7, CosNewFixed(cosDoc, false, wordQuad.br.v)); // Bottom-right        Top-left Y
 
-                PDTextAnnotSetOpen(pdAnnot, true);
+                    // Add the QuadPoints array to the annotation's dictionary
+                    CosDictPutKeyString(annotObj, "QuadPoints", quadArray);
+
+                    // Set annotation color (e.g., yellow)
+                    PDColorValueRec color;
+                    color.space = PDDeviceRGB;
+                    color.value[0] = ASFloatToFixed(1.0f); // Red
+                    color.value[1] = ASFloatToFixed(1.0f); // Green
+                    color.value[2] = ASFloatToFixed(0.0f); // Blue
+                    PDAnnotSetColor(pdAnnot, &color);
+                }
 
                 // Force a redraw of the page
                 AVPageView pageView = AVDocGetPageView(avDoc);
@@ -146,50 +143,50 @@ ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clie
     return true; // Continue enumeration
 }
 
-//void ExtractWordsFromPDF() {
-//    // Encoding info and vector: Pass NULL for defaults
-//    ASUns16* outEncInfo = NULL;
-//    char** outEncVec = NULL;
-//
-//    // Ligature table: Use default ligatures by passing NULL
-//    char** ligatureTbl = NULL;
-//
-//    // Algorithm version: Use the latest
-//    ASInt16 algVersion = WF_LATEST_VERSION;
-//
-//    // Word-finding options: Ignored in Acrobat 5.0+, pass 0
-//    ASUns16 rdFlags = 0;
-//
-//    // Client data: Pass NULL if no custom data is needed
-//    void* clientData = NULL;
-//
-//    AVDoc avDoc = AVAppGetActiveDoc();
-//    if (!avDoc) {
-//        AVAlertNote("No active document found!");
-//        return;
-//    }
-//
-//    PDDoc pdDoc = AVDocGetPDDoc(avDoc);
-//    if (!pdDoc) {
-//        AVAlertNote("No valid PDF document found!");
-//        return;
-//    }
-//
-//    // Create Word Finder
-//    ASBool success = false;
-//    PDWordFinder wordFinder = PDDocCreateWordFinder(pdDoc, outEncInfo, outEncVec, ligatureTbl, algVersion, rdFlags, clientData);
-//    if (wordFinder) {
-//        // Use the Word Finder to enumerate or acquire words
-//        // Example: Enumerate words on the first page
-//        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, NULL);
-//
-//        // Destroy the Word Finder
-//        PDWordFinderDestroy(wordFinder);
-//    }
-//    else {
-//        std::cerr << "Failed to create Word Finder." << std::endl;
-//    }
-//}
+void ExtractWordsFromPDF() {
+    // Encoding info and vector: Pass NULL for defaults
+    ASUns16* outEncInfo = NULL;
+    char** outEncVec = NULL;
+
+    // Ligature table: Use default ligatures by passing NULL
+    char** ligatureTbl = NULL;
+
+    // Algorithm version: Use the latest
+    ASInt16 algVersion = WF_LATEST_VERSION;
+
+    // Word-finding options: Ignored in Acrobat 5.0+, pass 0
+    ASUns16 rdFlags = 0;
+
+    // Client data: Pass NULL if no custom data is needed
+    void* clientData = NULL;
+
+    AVDoc avDoc = AVAppGetActiveDoc();
+    if (!avDoc) {
+        AVAlertNote("No active document found!");
+        return;
+    }
+
+    PDDoc pdDoc = AVDocGetPDDoc(avDoc);
+    if (!pdDoc) {
+        AVAlertNote("No valid PDF document found!");
+        return;
+    }
+
+    // Create Word Finder
+    ASBool success = false;
+    PDWordFinder wordFinder = PDDocCreateWordFinder(pdDoc, outEncInfo, outEncVec, ligatureTbl, algVersion, rdFlags, clientData);
+    if (wordFinder) {
+        // Use the Word Finder to enumerate or acquire words
+        // Example: Enumerate words on the first page
+        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, NULL);
+
+        // Destroy the Word Finder
+        PDWordFinderDestroy(wordFinder);
+    }
+    else {
+        std::cerr << "Failed to create Word Finder." << std::endl;
+    }
+}
 
 /**		BasicPlugin project is an Acrobat plugin sample with the minimum code 
 	to provide an environment for plugin developers to get started quickly.
@@ -207,7 +204,7 @@ ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clie
 	@see PDDocGetNumPages
 */ 
 ACCB1 void ACCB2 MyPluginCommand(void* clientData) {
-    //ExtractWordsFromPDF();
+    ExtractWordsFromPDF();
     size_t strSize = INITIAL_STR_SIZE;
     char* str = (char*)malloc(strSize);
     if (!str) {
@@ -225,7 +222,13 @@ ACCB1 void ACCB2 MyPluginCommand(void* clientData) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Get document data and process
-    std::vector<std::pair<std::string, std::vector<std::string>>> output = getDocumentData();
+    std::vector<docProcessedData> output = getDocumentData();
+
+    for (auto& data : output)
+    {
+        downloadUrl(data.docInfo.mediaUrl, data.docInfo.filename);
+        openFileUrl(data.docInfo.filename);
+    }
 
     // Clean up
     curl_global_cleanup();

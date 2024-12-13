@@ -1,5 +1,8 @@
 #include "apiRequests.h"
 
+#include "PIHeaders.h"
+#include <iostream>
+
 // Helper function to trim whitespace
 std::string trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\n\r");
@@ -31,8 +34,8 @@ std::string findValue(const std::string& json, const std::string& key) {
 }
 
 // Helper function to parse the items array and save mediaUrl with its id
-std::vector<std::pair<std::string, std::string>> extractMediaUrlsWithIds(const std::string& json) {
-    std::vector<std::pair<std::string, std::string>> mediaUrlsWithIds;
+std::vector<docInfo> extractMediaUrlsWithIds(const std::string& json) {
+    std::vector<docInfo> mediaUrlsWithIds;
 
     size_t itemsPos = json.find("\"items\"");
     if (itemsPos == std::string::npos) return mediaUrlsWithIds;
@@ -54,9 +57,10 @@ std::vector<std::pair<std::string, std::string>> extractMediaUrlsWithIds(const s
         std::string id = findValue(item, "id");
         std::string citationsCountStr = findValue(item, "citationsCount");
         std::string mediaUrl = findValue(item, "mediaUrl");
+        std::string filename = findValue(item, "title");
 
         if (!citationsCountStr.empty() && std::stoi(citationsCountStr) > 0 && !mediaUrl.empty() && !id.empty()) {
-            mediaUrlsWithIds.emplace_back(mediaUrl, id);
+            mediaUrlsWithIds.emplace_back(docInfo({ id, mediaUrl, filename }));
         }
 
         objStart = objEnd + 1;
@@ -115,6 +119,44 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return realsize;
 }
 
+static int debug_callback(CURL* handle, curl_infotype type, char* data, size_t size, void* userptr) {
+    if (type == CURLINFO_TEXT)
+        fprintf(stderr, "== Info: %s", data);
+    return 0;
+}
+
+std::string performCurlRequest_simple(const std::string& url) {
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Failed to initialize CURL\n");
+        return "";
+    }
+
+    std::string response;
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE);
+
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, NULL);
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, NULL);
+
+    // SSL/TLS options
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L); // Verify hostname
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L); // Verify CA
+
+    curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, debug_callback);
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        fprintf(stderr, "CURL request failed: %s\n", curl_easy_strerror(res));
+    }
+
+    curl_easy_cleanup(curl);
+    return response;
+}
+
 // Function to perform a cURL request with an API key and return the response
 std::string performCurlRequest(const std::string& url) {
     CURL* curl = curl_easy_init();
@@ -144,6 +186,8 @@ std::string performCurlRequest(const std::string& url) {
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBuffer);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
@@ -184,23 +228,174 @@ std::vector<std::string> processCitationData(const std::string& documentId) {
 }
 
 // Function to get documents and process them
-std::vector<std::pair<std::string, std::vector<std::string>>> getDocumentData() {
+std::vector<docProcessedData> getDocumentData() {
     std::string documentsUrl = "https://api.smartcite.povio.dev/api/documents/";
     std::string documentsResponse = performCurlRequest(documentsUrl);
-    std::vector<std::pair<std::string, std::vector<std::string>>> output;
+    std::vector<docProcessedData> output;
     if (documentsResponse.empty()) {
         fprintf(stderr, "Failed to retrieve documents\n");
         return output;
     }
 
     // Parse documents and extract media URLs with IDs
-    std::vector<std::pair<std::string, std::string>> mediaUrlsWithIds = extractMediaUrlsWithIds(documentsResponse);
+    std::vector<docInfo> mediaUrlsWithIds = extractMediaUrlsWithIds(documentsResponse);
     // Process each document's citations
     for (const auto& pair : mediaUrlsWithIds) {
-        const std::string& documentId = pair.second; // The second element is the document ID
+        const std::string& documentId = pair.id; // The second element is the document ID
         std::vector<std::string> sourceText = processCitationData(documentId);
-        output.push_back(std::make_pair(pair.first, sourceText));
+        output.push_back(docProcessedData({pair, sourceText}));
     }
 
     return output;
+}
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <curl/curl.h>
+#include <windows.h>
+#include <shlobj.h> // For SHGetFolderPath
+
+// Structure for file handling during download
+struct FileHandle {
+    FILE* file;
+    const char* filename;
+};
+
+// Callback function to write data to a file
+size_t write_data(void* ptr, size_t size, size_t nmemb, void* stream) {
+    struct FileHandle* out = (struct FileHandle*)stream;
+    if (!out->file) {
+        return -1; // Failure
+    }
+    return fwrite(ptr, size, nmemb, out->file);
+}
+
+// Function to get the AppData directory path
+char* get_appdata_path() {
+    static char appdata_path[MAX_PATH];
+    if (SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdata_path) != S_OK) {
+        fprintf(stderr, "Error: Unable to retrieve AppData path.\n");
+        return NULL;
+    }
+    return appdata_path;
+}
+
+// Function to download a file using libcurl
+int download_file(const char* url, const char* destination_path) {
+    CURL* curl;
+    CURLcode res;
+    struct FileHandle file_handle;
+
+    // Open file for writing
+    file_handle.file = fopen(destination_path, "wb");
+    if (!file_handle.file) {
+        fprintf(stderr, "Error: Unable to open file %s for writing.\n", destination_path);
+        return -1;
+    }
+    file_handle.filename = destination_path;
+
+    // Initialize curl
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file_handle);
+
+        // Perform the file download
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            fprintf(stderr, "Error: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            fclose(file_handle.file);
+            curl_easy_cleanup(curl);
+            return -1;
+        }
+
+        // Clean up
+        curl_easy_cleanup(curl);
+    }
+    else {
+        fprintf(stderr, "Error: Unable to initialize curl.\n");
+        fclose(file_handle.file);
+        return -1;
+    }
+
+    fclose(file_handle.file);
+    return 0; // Success
+}
+
+int downloadUrl(std::string url, std::string filename) {
+    char* appdata_path = get_appdata_path();
+    if (!appdata_path) {
+        return -1;
+    }
+
+    // Construct the target directory path
+    char target_dir[MAX_PATH];
+    snprintf(target_dir, sizeof(target_dir), "%s\\smartcite", appdata_path);
+
+    // Create the directory if it doesn't exist
+    if (CreateDirectory(target_dir, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Construct the full destination path
+        char destination_path[MAX_PATH];
+        snprintf(destination_path, sizeof(destination_path), "%s\\%s", target_dir, filename.c_str());
+
+        // Download the file
+        if (download_file(url.c_str(), destination_path) == 0) {
+            printf("File successfully downloaded to: %s\n", destination_path);
+        }
+        else {
+            fprintf(stderr, "Error: Failed to download the file.\n");
+        }
+    }
+    else {
+        fprintf(stderr, "Error: Unable to create directory %s.\n", target_dir);
+    }
+
+    return 0;
+}
+
+void openPDFDocument(std::string filePath) {
+    ASPathName path = ASFileSysCreatePathName(NULL, ASAtomFromString("Cstring"), filePath.c_str(), NULL);
+    ASFile file;
+    if (path != NULL) {
+        ASFileSysOpenFile(NULL, path, ASFILE_READ, &file);
+        AVDoc avDoc = AVDocOpenFromASFileWithParams(file, NULL, NULL);
+        if (avDoc) {
+            printf("Document opened successfully.\n");
+        }
+        else {
+            printf("Failed to open document.\n");
+        }
+        ASFileSysReleasePath(NULL, path);
+    }
+    else {
+        printf("Invalid file path.\n");
+    }
+}
+
+void openFileUrl(std::string filename) {
+    char* appdata_path = get_appdata_path();
+    if (!appdata_path) {
+        return;
+    }
+
+    // Construct the target directory path
+    char target_dir[MAX_PATH];
+    snprintf(target_dir, sizeof(target_dir), "%s\\smartcite", appdata_path);
+
+    // Create the directory if it doesn't exist
+    if (CreateDirectory(target_dir, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Construct the full destination path
+        char destination_path[MAX_PATH];
+        snprintf(destination_path, sizeof(destination_path), "%s\\%s", target_dir, filename.c_str());
+
+        // Download the file
+        openPDFDocument(std::string(destination_path));
+    }
+    else {
+        fprintf(stderr, "Error: Unable to create directory %s.\n", target_dir);
+    }
+
+    return;
 }
