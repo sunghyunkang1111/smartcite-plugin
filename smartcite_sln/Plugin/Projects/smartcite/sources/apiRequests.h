@@ -20,6 +20,19 @@ struct docProcessedData
 	std::vector<std::string> citations; 
 };
 
+struct finderOutputData
+{
+	int pageNumber;
+	std::string citation;
+	docInfo docInfo;
+};
+
+struct docWordsFinderData
+{
+	docProcessedData* processedData;
+	std::vector<finderOutputData> outputData;
+};
+
 std::string trim(const std::string& str);
 std::string findValue(const std::string& json, const std::string& key);
 std::vector<docInfo> extractMediaUrlsWithIds(const std::string& json);

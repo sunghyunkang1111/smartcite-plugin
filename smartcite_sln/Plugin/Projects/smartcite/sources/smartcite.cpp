@@ -57,93 +57,121 @@ ACCB1 ASBool ACCB2 MyPluginSetmenu()
 	// Of course, you can change it to your own.
 	return PluginMenuItem("Basic Plugin", "ADBE:BasicPluginMenu"); 
 }
-	
-//void createFile()
-//{
-//    // File path for writing "Hello"
-//    const char* filePath = "C:/Users/ddd/Desktop/test.txt";
-//    FILE* file = fopen(filePath, "w");
-//    if (file) {
-//        fprintf(file, "Hello");
-//        fclose(file);
-//    }
-//}
 
 ASFixedRect annotBounds;
 
 ASBool MyWordCallback(PDWordFinder wObj, PDWord wInfo, ASInt32 pgNum, void* clientData) {
+    std::vector<docWordsFinderData>* docsData = (std::vector<docWordsFinderData>*)clientData;
+
+    static std::vector<std::string> wordBufferList; // List of words in the current sentence
+    static std::vector<ASFixedQuad> quadList;       // List of quads for each word in the sentence
     char wordBuffer[256] = { 0 };
 
-    // Extract the string representation of the word
+    // Extract the current word
     PDWordGetString(wInfo, wordBuffer, sizeof(wordBuffer));
+    std::string currentWord = wordBuffer;
 
-    // Check if the word matches "Baystream"
-    if (strcmp(wordBuffer, "Baystream") == 0) {
-        // Get the bounding rectangle (quad) of the word
-        ASFixedQuad wordQuad;
-        PDWordGetNthQuad(wInfo, 0, &wordQuad);
+    // Get bounding quad of the current word
+    ASFixedQuad wordQuad;
+    PDWordGetNthQuad(wInfo, 0, &wordQuad);
 
-        // Convert the quad to a rectangle
-        ASFixedRect annotBounds;
-        annotBounds.left = wordQuad.bl.h;
-        annotBounds.bottom = wordQuad.bl.v;
-        annotBounds.right = wordQuad.tr.h;
-        annotBounds.top = wordQuad.tr.v;
+    // Add current word and quad to buffers
+    wordBufferList.push_back(currentWord);
+    quadList.push_back(wordQuad);
 
-        // Get the current document and page
-        AVDoc avDoc = AVAppGetActiveDoc();
-        if (avDoc) {
-            PDDoc pdDoc = AVDocGetPDDoc(avDoc);
-            PDPage pdPage = PDDocAcquirePage(pdDoc, pgNum);
+    // Check for sentence-ending punctuation
+    bool isSentenceEnd = (currentWord.back() == '.' || currentWord.back() == '!' || currentWord.back() == '?');
 
-            if (pdPage) {
-                // Add highlight annotation
-                PDAnnot pdAnnot = PDPageAddNewAnnot(pdPage, -1, ASAtomFromString("Highlight"), &annotBounds);
+    // If end of sentence or segment
+    if (isSentenceEnd) {
+        for (int i = 0; i < docsData->size(); i++) {
+            for (int j = 0; j < docsData->at(i).processedData->citations.size(); j++) {
+                const std::string& citation = docsData->at(i).processedData->citations[j];
 
-                {
-                    // Access the annotation's Cos object
-                    CosObj annotObj = PDAnnotGetCosObj(pdAnnot);
-
-                    // Create the QuadPoints array
-                    CosDoc cosDoc = PDDocGetCosDoc(pdDoc);
-                    CosObj quadArray = CosNewArray(cosDoc, false, 8);
-                    CosArrayPut(quadArray, 0, CosNewFixed(cosDoc, false, wordQuad.tl.h)); // top-left       Bottom-right X
-                    CosArrayPut(quadArray, 1, CosNewFixed(cosDoc, false, wordQuad.tl.v)); // top-left       Bottom-right Y
-                    CosArrayPut(quadArray, 2, CosNewFixed(cosDoc, false, wordQuad.tr.h)); // Top-right X
-                    CosArrayPut(quadArray, 3, CosNewFixed(cosDoc, false, wordQuad.tr.v)); // Top-right Y
-                    CosArrayPut(quadArray, 4, CosNewFixed(cosDoc, false, wordQuad.bl.h)); // Bottom-left X
-                    CosArrayPut(quadArray, 5, CosNewFixed(cosDoc, false, wordQuad.bl.v)); // Bottom-left Y
-                    CosArrayPut(quadArray, 6, CosNewFixed(cosDoc, false, wordQuad.br.h)); // Bottom-right        Top-left X
-                    CosArrayPut(quadArray, 7, CosNewFixed(cosDoc, false, wordQuad.br.v)); // Bottom-right        Top-left Y
-
-                    // Add the QuadPoints array to the annotation's dictionary
-                    CosDictPutKeyString(annotObj, "QuadPoints", quadArray);
-
-                    // Set annotation color (e.g., yellow)
-                    PDColorValueRec color;
-                    color.space = PDDeviceRGB;
-                    color.value[0] = ASFloatToFixed(1.0f); // Red
-                    color.value[1] = ASFloatToFixed(1.0f); // Green
-                    color.value[2] = ASFloatToFixed(0.0f); // Blue
-                    PDAnnotSetColor(pdAnnot, &color);
+                // Rebuild sentence from word buffer to locate citation
+                std::string sentenceBuffer;
+                for (const auto& word : wordBufferList) {
+                    if (!sentenceBuffer.empty()) sentenceBuffer += " ";
+                    sentenceBuffer += word;
                 }
 
-                // Force a redraw of the page
-                AVPageView pageView = AVDocGetPageView(avDoc);
-                AVPageViewDrawNow(pageView);
+                // Find citation within the sentence
+                size_t pos = sentenceBuffer.find(citation);
+                if (pos != std::string::npos) {
+                    finderOutputData finderData = { pgNum, citation, docsData->at(i).processedData->docInfo };
+                    docsData->at(i).outputData.push_back(finderData);
+                    // Highlight only the matching words
+                    size_t startWordIndex = 0;
+                    size_t charCount = 0;
 
-                // Release the page
-                PDPageRelease(pdPage);
+                    for (size_t k = 0; k < wordBufferList.size(); ++k) {
+                        const std::string& word = wordBufferList[k];
+                        size_t wordLen = word.length();
 
-                std::cout << "Added highlight annotation for 'Baystream' on page " << pgNum + 1 << "." << std::endl;
+                        // Check if the current word is part of the citation match
+                        if (charCount >= pos && charCount < pos + citation.length()) {
+                            // Add highlight for this word
+                            AVDoc avDoc = AVAppGetActiveDoc();
+                            if (avDoc) {
+                                PDDoc pdDoc = AVDocGetPDDoc(avDoc);
+                                PDPage pdPage = PDDocAcquirePage(pdDoc, pgNum);
+                                if (pdPage) {
+                                    // Add annotation for the word
+                                    ASFixedRect annotBounds;
+                                    annotBounds.left = quadList[k].bl.h;
+                                    annotBounds.bottom = quadList[k].bl.v;
+                                    annotBounds.right = quadList[k].tr.h;
+                                    annotBounds.top = quadList[k].tr.v;
+
+                                    PDAnnot pdAnnot = PDPageAddNewAnnot(pdPage, -1, ASAtomFromString("Highlight"), &annotBounds);
+                                    CosObj annotObj = PDAnnotGetCosObj(pdAnnot);
+
+                                    // Add QuadPoints for this word
+                                    CosDoc cosDoc = PDDocGetCosDoc(pdDoc);
+                                    CosObj quadArray = CosNewArray(cosDoc, false, 8);
+                                    CosArrayPut(quadArray, 0, CosNewFixed(cosDoc, false, quadList[k].tl.h));
+                                    CosArrayPut(quadArray, 1, CosNewFixed(cosDoc, false, quadList[k].tl.v));
+                                    CosArrayPut(quadArray, 2, CosNewFixed(cosDoc, false, quadList[k].tr.h));
+                                    CosArrayPut(quadArray, 3, CosNewFixed(cosDoc, false, quadList[k].tr.v));
+                                    CosArrayPut(quadArray, 4, CosNewFixed(cosDoc, false, quadList[k].bl.h));
+                                    CosArrayPut(quadArray, 5, CosNewFixed(cosDoc, false, quadList[k].bl.v));
+                                    CosArrayPut(quadArray, 6, CosNewFixed(cosDoc, false, quadList[k].br.h));
+                                    CosArrayPut(quadArray, 7, CosNewFixed(cosDoc, false, quadList[k].br.v));
+                                    CosDictPutKeyString(annotObj, "QuadPoints", quadArray);
+
+                                    // Set annotation color
+                                    PDColorValueRec color;
+                                    color.space = PDDeviceRGB;
+                                    color.value[0] = ASFloatToFixed(1.0f);
+                                    color.value[1] = ASFloatToFixed(1.0f);
+                                    color.value[2] = ASFloatToFixed(0.0f);
+                                    PDAnnotSetColor(pdAnnot, &color);
+
+                                    AVPageView pageView = AVDocGetPageView(avDoc);
+                                    AVPageViewDrawNow(pageView);
+                                    PDPageRelease(pdPage);
+                                }
+                            }
+                        }
+
+                        // Update character count
+                        charCount += wordLen + 1; // Account for space
+                    }
+
+                    std::cout << "Highlighted citation: '" << citation << "' on page " << pgNum + 1 << std::endl;
+                }
             }
         }
+
+        // Reset buffers
+        wordBufferList.clear();
+        quadList.clear();
     }
 
     return true; // Continue enumeration
 }
 
-void ExtractWordsFromPDF() {
+void ExtractWordsFromPDF(std::vector<docWordsFinderData>& docsData) {
     // Encoding info and vector: Pass NULL for defaults
     ASUns16* outEncInfo = NULL;
     char** outEncVec = NULL;
@@ -178,7 +206,7 @@ void ExtractWordsFromPDF() {
     if (wordFinder) {
         // Use the Word Finder to enumerate or acquire words
         // Example: Enumerate words on the first page
-        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, NULL);
+        PDWordFinderEnumWords(wordFinder, 0, MyWordCallback, (void*)&docsData);
 
         // Destroy the Word Finder
         PDWordFinderDestroy(wordFinder);
@@ -204,37 +232,34 @@ void ExtractWordsFromPDF() {
 	@see PDDocGetNumPages
 */ 
 ACCB1 void ACCB2 MyPluginCommand(void* clientData) {
-    ExtractWordsFromPDF();
-    size_t strSize = INITIAL_STR_SIZE;
-    char* str = (char*)malloc(strSize);
-    if (!str) {
-        fprintf(stderr, "Failed to allocate memory for message buffer\n");
-        return;
-    }
-    str[0] = '\0';
-
-    // Plugin initialization message
-    ASAtom NameAtom = ASExtensionGetRegisteredName(gExtensionID);
-    const char* name = ASAtomGetString(NameAtom);
-    snprintf(str, strSize, "This menu item is added by plugin %s.\n", name);
-
     // Initialize cURL
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Get document data and process
     std::vector<docProcessedData> output = getDocumentData();
 
-    for (auto& data : output)
+    std::vector<docWordsFinderData> dataToProcess;
+
+    for (int i = 0; i < output.size(); i++)
     {
-        downloadUrl(data.docInfo.mediaUrl, data.docInfo.filename);
-        openFileUrl(data.docInfo.filename);
+        docWordsFinderData dataToFind;
+        dataToFind.processedData = &output[i];
+        dataToProcess.push_back(dataToFind);
+    }
+
+    ExtractWordsFromPDF(dataToProcess);
+
+    for (auto& data : dataToProcess)
+    {
+        for (auto& info : data.outputData)
+        {
+            downloadUrl(info.docInfo.mediaUrl, info.docInfo.filename);
+            openFileUrl(info.docInfo.filename);
+        }
     }
 
     // Clean up
     curl_global_cleanup();
-
-    AVAlertNote(str);
-    free(str);
 }
 
 /* MyPluginIsEnabled
