@@ -3,6 +3,59 @@
 #include "PIHeaders.h"
 #include <iostream>
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iostream>
+#include <string>
+
+#pragma comment(lib, "Ws2_32.lib")
+
+size_t write_callback_test(void* contents, size_t size, size_t nmemb, void* userp) {
+    size_t total_size = size * nmemb;
+    std::string* response = static_cast<std::string*>(userp);
+    response->append(static_cast<char*>(contents), total_size);
+    return total_size;
+}
+
+void sendTestRequest()
+{
+    CURL* curl;
+    CURLcode res;
+
+    std::string url = "https://google.com";
+    std::string response;
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback_test);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+
+        // Perform the HTTP GET request
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << "\n";
+        }
+        else {
+            std::cout << "Server response: " << response << "\n";
+        }
+
+        curl_easy_cleanup(curl);
+    }
+    else {
+        std::cerr << "Failed to initialize libcurl.\n";
+    }
+
+    curl_global_cleanup();
+    return ;
+}
+
 // Helper function to trim whitespace
 std::string trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\n\r");
@@ -159,6 +212,7 @@ std::string performCurlRequest_simple(const std::string& url) {
 
 // Function to perform a cURL request with an API key and return the response
 std::string performCurlRequest(const std::string& url) {
+    //sendTestRequest();
     CURL* curl = curl_easy_init();
     if (!curl) {
         fprintf(stderr, "Failed to initialize CURL\n");
@@ -229,7 +283,7 @@ std::vector<std::string> processCitationData(const std::string& documentId) {
 
 // Function to get documents and process them
 std::vector<docProcessedData> getDocumentData() {
-    std::string documentsUrl = "https://api.smartcite.povio.dev/api/documents/";
+    std::string documentsUrl = "http://google.com";
     std::string documentsResponse = performCurlRequest(documentsUrl);
     std::vector<docProcessedData> output;
     if (documentsResponse.empty()) {
