@@ -283,7 +283,7 @@ std::vector<std::string> processCitationData(const std::string& documentId) {
 
 // Function to get documents and process them
 std::vector<docProcessedData> getDocumentData() {
-    std::string documentsUrl = "http://google.com";
+    std::string documentsUrl = "https://api.smartcite.povio.dev/api/documents/";
     std::string documentsResponse = performCurlRequest(documentsUrl);
     std::vector<docProcessedData> output;
     if (documentsResponse.empty()) {
